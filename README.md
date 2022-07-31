@@ -1,5 +1,11 @@
 # database
 
-a simple database implementation in rust
+reference: https://cstack.github.io/db_tutorial/
 
-this is a rust version of https://cstack.github.io/db_tutorial/ since I didn't want to deal with low level c.
+This is a sqlite inspired database program written in Rust, to learn the key concepts of database implementations.
+
+Some of the concepts are:
+- A SQL REPL using [a rust implementation of readline](https://github.com/kkawakam/rustyline)
+- A SQL parser using [parser combinators](https://github.com/Geal/nom)
+- The format of a database file, including pages and internal row structures
+
