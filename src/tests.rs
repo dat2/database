@@ -35,7 +35,7 @@ fn allows_inserting_max_length() -> Result<()> {
     let email = "a".repeat(255);
     let input = vec![
         format!(
-            "insert 1 '{username}' '{email}'    ",
+            "insert 1 '{username}' '{email}'",
             username = username,
             email = email,
         ),

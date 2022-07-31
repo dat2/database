@@ -1,3 +1,4 @@
+use crate::pager::Pager;
 use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
 
@@ -26,6 +27,16 @@ impl Row {
             email: email.to_owned(),
         }
     }
+
+    pub fn validate(&self) -> Result<()> {
+        if self.username.len() >= USERNAME_SIZE {
+            bail!("Column (username) is too long.");
+        }
+        if self.email.len() >= EMAIL_SIZE {
+            bail!("Column (email) is too long.");
+        }
+        Ok(())
+    }
 }
 
 impl std::fmt::Display for Row {
@@ -36,7 +47,7 @@ impl std::fmt::Display for Row {
 
 pub struct Cursor<'a> {
     current: usize,
-    table: &'a mut Table,
+    table: &'a mut Table<'a>,
 }
 
 impl<'a> Iterator for Cursor<'a> {
@@ -56,16 +67,18 @@ impl<'a> Iterator for Cursor<'a> {
     }
 }
 
-pub struct Table {
+pub struct Table<'a> {
     pages: Vec<[u8; PAGE_SIZE as usize]>,
     num_rows: usize,
+    pager: &'a mut Pager,
 }
 
-impl Table {
-    pub fn new() -> Table {
+impl<'a> Table<'a> {
+    pub fn new(pager: &'a mut Pager) -> Table<'a> {
         Table {
             pages: vec![],
             num_rows: 0,
+            pager,
         }
     }
 
@@ -89,7 +102,7 @@ impl Table {
         Ok(())
     }
 
-    pub fn select(&mut self) -> Cursor {
+    pub fn select(&'a mut self) -> Cursor<'a> {
         Cursor {
             current: 0,
             table: self,

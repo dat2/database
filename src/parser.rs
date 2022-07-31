@@ -47,6 +47,6 @@ fn sql(i: &str) -> IResult<&str, SQL> {
 pub fn parse_sql(line: &str) -> Result<SQL> {
     let (_, output) = sql(line)
         .finish()
-        .map_err(|_ | anyhow!("Failed to parse statement."))?;
+        .map_err(|_| anyhow!("Failed to parse statement."))?;
     Ok(output)
 }

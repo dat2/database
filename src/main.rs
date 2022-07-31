@@ -1,10 +1,12 @@
+mod pager;
 mod parser;
 mod table;
 #[cfg(test)]
 mod tests;
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 
+use crate::pager::Pager;
 use crate::parser::{parse_sql, SQL};
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
@@ -23,8 +25,16 @@ fn execute_command(line: &str) -> Result<()> {
     }
 }
 
-fn execute_sql(line: &str, table: &mut Table) -> Result<()> {
+fn prepare_sql(line: &str) -> Result<SQL> {
     let sql = parse_sql(line)?;
+    if let SQL::Insert(ref row) = sql {
+        row.validate()?;
+    }
+    Ok(sql)
+}
+
+fn execute_sql<'a>(line: &str, table: &'a mut Table<'a>) -> Result<()> {
+    let sql = prepare_sql(line)?;
     match sql {
         SQL::Select => {
             for row in table.select() {
@@ -40,7 +50,7 @@ fn execute_sql(line: &str, table: &mut Table) -> Result<()> {
     }
 }
 
-fn process(line: &str, table: &mut Table) -> Result<()> {
+fn process<'a>(line: &str, table: &'a mut Table<'a>) -> Result<()> {
     if let Some(char) = line.chars().nth(0) {
         if char == '.' {
             return execute_command(line);
@@ -50,8 +60,14 @@ fn process(line: &str, table: &mut Table) -> Result<()> {
 }
 
 fn main() -> Result<()> {
+    let args: Vec<_> = std::env::args().collect();
+    if args.len() < 1 {
+        bail!("Must supply a db filename.");
+    }
+    let mut pager = Pager::new(&args[0])?;
+    let mut table = Table::new(&mut pager);
+
     let mut rl = Editor::<()>::new()?;
-    let mut table = Table::new();
     loop {
         let readline = rl.readline("database > ");
         match readline {
