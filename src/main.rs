@@ -21,27 +21,29 @@ fn execute_command(line: &str) -> Result<()> {
     }
 }
 
-fn execute_sql(line: &str) -> Result<()> {
+fn execute_sql(line: &str, table: &mut Table) -> Result<()> {
     let sql = parse_sql(line)?;
     match sql {
         SQL::Select => {
-            println!("Selecting...");
+            for row in table.select() {
+                println!("{}", row);
+            }
             Ok(())
         }
         SQL::Insert(row) => {
-            println!("Inserting {:?}", row);
+            table.insert(row)?;
             Ok(())
         }
     }
 }
 
-fn process(line: &str) -> Result<()> {
+fn process(line: &str, table: &mut Table) -> Result<()> {
     if let Some(char) = line.chars().nth(0) {
         if char == '.' {
             return execute_command(line);
         }
     }
-    execute_sql(line)
+    execute_sql(line, table)
 }
 
 fn main() -> Result<()> {
@@ -52,7 +54,7 @@ fn main() -> Result<()> {
         match readline {
             Ok(line) => {
                 rl.add_history_entry(&line);
-                if let Err(e) = process(&line) {
+                if let Err(e) = process(&line, &mut table) {
                     println!("Error: {:?}", e);
                 }
             }

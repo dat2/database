@@ -11,8 +11,8 @@ use nom::{
 
 use crate::table::Row;
 
-pub enum SQL<'a> {
-    Insert(Row<'a>),
+pub enum SQL {
+    Insert(Row),
     Select,
 }
 
