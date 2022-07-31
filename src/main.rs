@@ -1,5 +1,7 @@
 mod parser;
 mod table;
+#[cfg(test)]
+mod tests;
 
 use anyhow::Result;
 
@@ -32,6 +34,7 @@ fn execute_sql(line: &str, table: &mut Table) -> Result<()> {
         }
         SQL::Insert(row) => {
             table.insert(row)?;
+            println!("Executed.");
             Ok(())
         }
     }
