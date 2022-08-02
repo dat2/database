@@ -1,3 +1,4 @@
+mod cursor;
 mod database;
 mod pager;
 mod parser;
@@ -6,14 +7,15 @@ mod table;
 mod tests;
 
 use anyhow::{anyhow, bail, Result};
+use rustyline::error::ReadlineError;
+use rustyline::Editor;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::cursor::Cursor;
 use crate::database::{close, open};
 use crate::parser::{parse_sql, SQL};
-use rustyline::error::ReadlineError;
-use rustyline::Editor;
-use table::Table;
+use crate::table::Table;
 
 fn execute_command(table: Rc<RefCell<Table>>, line: &str) -> Result<()> {
     match line {
@@ -41,7 +43,7 @@ fn execute_sql(table: Rc<RefCell<Table>>, line: &str) -> Result<()> {
     let sql = prepare_sql(line)?;
     match sql {
         SQL::Select => {
-            for row in table.borrow_mut().select() {
+            for row in Cursor::start(&mut table.borrow_mut()) {
                 println!("{}", row);
             }
             Ok(())
