@@ -1,5 +1,9 @@
+use std::cell::RefCell;
+use std::ops::Range;
+use std::rc::Rc;
+
 use crate::pager::Pager;
-use anyhow::{bail, Result};
+use anyhow::{bail, ensure, Error, Result};
 use serde::{Deserialize, Serialize};
 
 const ID_SIZE: usize = std::mem::size_of::<u32>();
@@ -9,7 +13,7 @@ const ROW_SIZE: usize = ID_SIZE + USERNAME_SIZE + EMAIL_SIZE;
 
 const PAGE_SIZE: usize = 4096;
 const TABLE_MAX_PAGES: usize = 100;
-const ROWS_PER_PAGE: usize = PAGE_SIZE / ROW_SIZE;
+pub const ROWS_PER_PAGE: usize = PAGE_SIZE / ROW_SIZE;
 pub const TABLE_MAX_ROWS: usize = ROWS_PER_PAGE * TABLE_MAX_PAGES;
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
@@ -29,12 +33,11 @@ impl Row {
     }
 
     pub fn validate(&self) -> Result<()> {
-        if self.username.len() >= USERNAME_SIZE {
-            bail!("Column (username) is too long.");
-        }
-        if self.email.len() >= EMAIL_SIZE {
-            bail!("Column (email) is too long.");
-        }
+        ensure!(
+            self.username.len() < USERNAME_SIZE,
+            "Column (username) is too long."
+        );
+        ensure!(self.email.len() < EMAIL_SIZE, "Column (email) is too long.");
         Ok(())
     }
 }
@@ -47,7 +50,7 @@ impl std::fmt::Display for Row {
 
 pub struct Cursor<'a> {
     current: usize,
-    table: &'a mut Table<'a>,
+    table: &'a mut Table,
 }
 
 impl<'a> Iterator for Cursor<'a> {
@@ -57,52 +60,48 @@ impl<'a> Iterator for Cursor<'a> {
         if self.current == self.table.num_rows {
             None
         } else {
-            let row_slot = self.table.row_slot(self.current);
+            let (page_num, slot) = self.table.get_page_and_row_slot(self.current);
+            let mut pager = self.table.pager.borrow_mut();
             self.current += 1;
-            match bincode::deserialize(row_slot) {
-                Ok(row) => Some(row),
-                Err(_) => None,
-            }
+            pager
+                .get_page(page_num)
+                .and_then(|page| bincode::deserialize(&page[slot]).map_err(Error::msg))
+                .ok()
         }
     }
 }
 
-pub struct Table<'a> {
-    pages: Vec<[u8; PAGE_SIZE as usize]>,
-    num_rows: usize,
-    pager: &'a mut Pager,
+pub struct Table {
+    pub num_rows: usize,
+    pub pager: Rc<RefCell<Pager>>,
 }
 
-impl<'a> Table<'a> {
-    pub fn new(pager: &'a mut Pager) -> Table<'a> {
-        Table {
-            pages: vec![],
-            num_rows: 0,
-            pager,
-        }
+impl Table {
+    pub fn new(pager: Rc<RefCell<Pager>>) -> Result<Table> {
+        let num_rows = pager.borrow().get_file_size()? as usize / ROW_SIZE;
+        Ok(Table { num_rows, pager })
     }
 
-    fn row_slot(&mut self, row_num: usize) -> &mut [u8] {
+    fn get_page_and_row_slot(&mut self, row_num: usize) -> (usize, Range<usize>) {
         let page_num = row_num / ROWS_PER_PAGE;
-        while self.pages.len() <= page_num {
-            self.pages.push([0; PAGE_SIZE]);
-        }
         let row_offset = row_num % ROWS_PER_PAGE;
         let offset = row_offset * ROW_SIZE;
-        &mut self.pages[page_num][offset..offset + ROW_SIZE]
+        (page_num, offset..offset + ROW_SIZE)
     }
 
     pub fn insert(&mut self, row: Row) -> Result<()> {
         if self.num_rows as usize >= TABLE_MAX_ROWS {
             bail!("Table is full.");
         }
-        let row_slot = self.row_slot(self.num_rows as usize);
-        bincode::serialize_into(row_slot, &row)?;
+        let (page_num, slot) = self.get_page_and_row_slot(self.num_rows);
+        let mut pager = self.pager.borrow_mut();
+        let page = pager.get_page(page_num)?;
+        bincode::serialize_into(&mut page[slot], &row)?;
         self.num_rows += 1;
         Ok(())
     }
 
-    pub fn select(&'a mut self) -> Cursor<'a> {
+    pub fn select(&mut self) -> Cursor {
         Cursor {
             current: 0,
             table: self,
