@@ -1,15 +1,13 @@
 use anyhow::Result;
 use assert_cmd::Command;
 
-
 #[test]
 fn inserts_and_selects() -> Result<()> {
     let mut cmd = Command::cargo_bin("database")?;
     let input = vec!["insert 1 'user' 'user@example.com'", "select", ".exit\n"];
     let output = ["Executed.", "(1, 'user', 'user@example.com')", "Exiting.\n"];
     let file = assert_fs::NamedTempFile::new("database.db")?;
-    cmd
-        .arg(file.path())
+    cmd.arg(file.path())
         .write_stdin(input.join("\n"))
         .assert()
         .success()
@@ -42,8 +40,7 @@ fn allows_inserting_max_length() -> Result<()> {
     ];
 
     let file = assert_fs::NamedTempFile::new("database.db")?;
-    cmd
-        .arg(file.path())
+    cmd.arg(file.path())
         .write_stdin(input.join("\n"))
         .assert()
         .success()

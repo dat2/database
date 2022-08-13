@@ -1,29 +1,18 @@
-use anyhow::{ensure, Result};
-use std::collections::BTreeMap;
+use anyhow::{anyhow, ensure, Result};
+use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
+
+use crate::node::Node;
 
 const PAGE_SIZE: usize = 4096;
 const MAX_PAGES: usize = 100;
 
 #[derive(Debug)]
-struct Page {
-    buffer: [u8; PAGE_SIZE],
-    default: bool,
-}
-
-impl Default for Page {
-    fn default() -> Page {
-        Page {
-            buffer: [0; PAGE_SIZE],
-            default: true,
-        }
-    }
-}
-
 pub struct Pager {
     file: File,
-    pages: BTreeMap<usize, Page>,
+    num_pages: usize,
+    nodes: HashMap<usize, Node>,
 }
 
 impl Pager {
@@ -33,34 +22,48 @@ impl Pager {
             .write(true)
             .read(true)
             .open(filename)?;
+        let metadata = file.metadata()?;
+        let num_pages = metadata.len() as usize / PAGE_SIZE;
         Ok(Pager {
             file,
-            pages: BTreeMap::new(),
+            num_pages,
+            nodes: HashMap::new(),
         })
     }
 
-    pub fn get_file_size(&self) -> Result<u64> {
-        let metadata = self.file.metadata()?;
-        Ok(metadata.len())
+    pub fn empty(&self) -> bool {
+        self.num_pages == 0
     }
 
-    pub fn get_page(&mut self, page_num: usize) -> Result<&mut [u8]> {
+    pub fn set_node(&mut self, page_num: usize, node: Node) {
+        self.nodes.insert(page_num, node);
+    }
+
+    pub fn get_node(&mut self, page_num: usize) -> Result<&mut Node> {
         ensure!(page_num <= MAX_PAGES, "Page number out of bounds.");
-        let page = self.pages.entry(page_num).or_default();
-        if page.default {
+        if self.num_pages < page_num {
+            self.num_pages = page_num;
+        }
+        if !self.nodes.contains_key(&page_num) {
+            let mut buffer = vec![0; PAGE_SIZE];
             self.file
                 .seek(SeekFrom::Start((page_num * PAGE_SIZE) as u64))?;
-            self.file.read(&mut page.buffer)?;
-            page.default = false;
+            self.file.read(&mut buffer)?;
+            let node: Node = bincode::deserialize(&buffer)?;
+            self.nodes.insert(page_num, node);
         }
-        Ok(&mut page.buffer)
+        self.nodes
+            .get_mut(&page_num)
+            .ok_or(anyhow!("Node not initialized"))
     }
 
     pub fn flush(&mut self) -> Result<()> {
-        for (page_num, page) in self.pages.iter() {
+        for (page_num, node) in self.nodes.iter() {
             self.file
                 .seek(SeekFrom::Start((page_num * PAGE_SIZE) as u64))?;
-            self.file.write(&page.buffer)?;
+            let mut buffer = vec![0; PAGE_SIZE];
+            bincode::serialize_into(&mut buffer, node)?;
+            self.file.write(&buffer)?;
         }
         Ok(())
     }
