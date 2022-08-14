@@ -52,10 +52,7 @@ fn is_select(ast: &[Statement]) -> bool {
                     },
                 ..
             }] => match names.as_slice() {
-                [Ident { value, .. }] => match value.as_str() {
-                    "users" => true,
-                    _ => false,
-                },
+                [Ident { value, .. }] => matches!(value.as_str(), "users"),
                 _ => false,
             },
             _ => false,
@@ -102,19 +99,18 @@ fn execute_sql(table: Rc<RefCell<Table>>, line: &str) -> Result<()> {
     } else if let Some(row) = is_insert(&ast) {
         row.validate()?;
         let mut table = table.borrow_mut();
-        table.insert(row)
+        table.insert(row)?;
+        table.flush()
     } else {
         Err(anyhow!("Unimplemented"))
     }
 }
 
 fn execute(table: Rc<RefCell<Table>>, line: &str) -> Result<()> {
-    if let Some(char) = line.chars().nth(0) {
-        if char == '.' {
-            return execute_command(table, line);
-        }
+    match line.chars().next() {
+        Some('.') => execute_command(table, line),
+        _ => execute_sql(table, line)
     }
-    execute_sql(table, line)
 }
 
 fn run(table: Rc<RefCell<Table>>, rl: &mut Editor<()>) -> Result<()> {
@@ -126,6 +122,7 @@ fn run(table: Rc<RefCell<Table>>, rl: &mut Editor<()>) -> Result<()> {
     if let Err(err) = execute(table, &line) {
         println!("Error: {}", err);
     }
+    rl.save_history("history.txt")?;
     Ok(())
 }
 
@@ -136,6 +133,9 @@ fn main() -> Result<()> {
     }
     let table = open(&args[1])?;
     let mut rl = Editor::<()>::new()?;
+    if rl.load_history("history.txt").is_err() {
+        // ignore err
+    }
     loop {
         run(table.clone(), &mut rl)?;
     }

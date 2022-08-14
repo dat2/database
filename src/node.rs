@@ -1,22 +1,22 @@
 use serde::{Deserialize, Serialize};
 
-use crate::table::{Row, ROWS_PER_PAGE};
+use crate::table::Row;
 use anyhow::Result;
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum Type {
     Root,
     Internal,
     Leaf,
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Cell {
-    key: usize,
+    key: u32,
     pub value: Vec<u8>,
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Node {
     ty: Type,
     parent: Option<usize>,
@@ -36,15 +36,9 @@ impl Node {
         self.cells.len()
     }
 
-    pub fn cell(&mut self, cell_num: usize) -> Option<&mut Cell> {
-        self.cells.get_mut(cell_num)
-    }
-
-    pub fn insert(&mut self, key: usize, row: Row) -> Result<()> {
-        let cell = Cell {
-            key,
-            value: bincode::serialize(&row)?,
-        };
+    pub fn insert(&mut self, key: u32, row: Row) -> Result<()> {
+        let value = bincode::serialize(&row)?;
+        let cell = Cell { key, value };
         self.cells.push(cell);
         Ok(())
     }

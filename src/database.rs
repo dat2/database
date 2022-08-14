@@ -8,9 +8,9 @@ use crate::table::Table;
 
 pub fn open(filename: &str) -> Result<Rc<RefCell<Table>>> {
     let mut pager = Pager::new(filename)?;
-    // empty database, initialize as leaf
     if pager.empty() {
-        pager.set_node(0, Node::leaf());
+        let page = pager.get_page(0)?;
+        bincode::serialize_into(page.as_mut_slice(), &Node::leaf())?;
         pager.flush()?;
     }
     let table = Table::new(pager);
@@ -20,6 +20,6 @@ pub fn open(filename: &str) -> Result<Rc<RefCell<Table>>> {
 
 pub fn close(table: Rc<RefCell<Table>>) -> Result<()> {
     let mut table = table.borrow_mut();
-    table.pager.flush()?;
+    table.flush()?;
     Ok(())
 }

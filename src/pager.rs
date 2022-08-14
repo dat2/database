@@ -1,9 +1,8 @@
 use anyhow::{anyhow, ensure, Result};
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
-
-use crate::node::Node;
 
 const PAGE_SIZE: usize = 4096;
 const MAX_PAGES: usize = 100;
@@ -12,7 +11,7 @@ const MAX_PAGES: usize = 100;
 pub struct Pager {
     file: File,
     num_pages: usize,
-    nodes: HashMap<usize, Node>,
+    pages: HashMap<usize, Vec<u8>>,
 }
 
 impl Pager {
@@ -27,7 +26,7 @@ impl Pager {
         Ok(Pager {
             file,
             num_pages,
-            nodes: HashMap::new(),
+            pages: HashMap::new(),
         })
     }
 
@@ -35,35 +34,28 @@ impl Pager {
         self.num_pages == 0
     }
 
-    pub fn set_node(&mut self, page_num: usize, node: Node) {
-        self.nodes.insert(page_num, node);
-    }
-
-    pub fn get_node(&mut self, page_num: usize) -> Result<&mut Node> {
+    pub fn get_page(&mut self, page_num: usize) -> Result<&mut Vec<u8>> {
         ensure!(page_num <= MAX_PAGES, "Page number out of bounds.");
         if self.num_pages < page_num {
             self.num_pages = page_num;
         }
-        if !self.nodes.contains_key(&page_num) {
+        if let Entry::Vacant(e) = self.pages.entry(page_num) {
             let mut buffer = vec![0; PAGE_SIZE];
             self.file
                 .seek(SeekFrom::Start((page_num * PAGE_SIZE) as u64))?;
             self.file.read(&mut buffer)?;
-            let node: Node = bincode::deserialize(&buffer)?;
-            self.nodes.insert(page_num, node);
+            e.insert(buffer);
         }
-        self.nodes
+        self.pages
             .get_mut(&page_num)
-            .ok_or(anyhow!("Node not initialized"))
+            .ok_or_else(|| anyhow!("Page not initialized"))
     }
 
     pub fn flush(&mut self) -> Result<()> {
-        for (page_num, node) in self.nodes.iter() {
+        for (page_num, page) in self.pages.iter() {
             self.file
                 .seek(SeekFrom::Start((page_num * PAGE_SIZE) as u64))?;
-            let mut buffer = vec![0; PAGE_SIZE];
-            bincode::serialize_into(&mut buffer, node)?;
-            self.file.write(&buffer)?;
+            self.file.write(page)?;
         }
         Ok(())
     }

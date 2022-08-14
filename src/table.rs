@@ -1,19 +1,14 @@
-use crate::cursor::Cursor;
+use std::collections::{HashMap, hash_map::Entry};
+
+use crate::node::Node;
 use crate::pager::Pager;
-use anyhow::{ensure, Result};
+use anyhow::{anyhow, ensure, Result};
 use serde::{Deserialize, Serialize};
 
-const ID_SIZE: usize = std::mem::size_of::<u32>();
 const USERNAME_SIZE: usize = 32;
 const EMAIL_SIZE: usize = 255;
-pub const ROW_SIZE: usize = ID_SIZE + USERNAME_SIZE + EMAIL_SIZE;
 
-const PAGE_SIZE: usize = 4096;
-const TABLE_MAX_PAGES: usize = 100;
-pub const ROWS_PER_PAGE: usize = PAGE_SIZE / ROW_SIZE;
-pub const TABLE_MAX_ROWS: usize = ROWS_PER_PAGE * TABLE_MAX_PAGES;
-
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Row {
     id: u32,
     username: String,
@@ -48,7 +43,8 @@ impl std::fmt::Display for Row {
 #[derive(Debug)]
 pub struct Table {
     pub root_page_num: usize,
-    pub pager: Pager,
+    pager: Pager,
+    nodes: HashMap<usize, Node>,
 }
 
 impl Table {
@@ -56,13 +52,31 @@ impl Table {
         Table {
             root_page_num: 0,
             pager,
+            nodes: HashMap::new(),
         }
     }
 
     pub fn insert(&mut self, row: Row) -> Result<()> {
-        let mut cursor = Cursor::end(self)?;
-        let slot = cursor.value()?;
-        bincode::serialize_into(slot, &row)?;
-        Ok(())
+        let node = self.get_node(self.root_page_num)?;
+        node.insert(row.id, row)
+    }
+
+    pub fn get_node(&mut self, page_num: usize) -> Result<&mut Node> {
+        if let Entry::Vacant(e) = self.nodes.entry(page_num) {
+            let page = self.pager.get_page(page_num)?;
+            let node = bincode::deserialize_from(page.as_slice())?;
+            e.insert(node);
+        }
+        self.nodes
+            .get_mut(&page_num)
+            .ok_or_else(|| anyhow!("Node not initialized"))
+    }
+
+    pub fn flush(&mut self) -> Result<()> {
+        for (page_num, node) in self.nodes.iter() {
+            let page = self.pager.get_page(*page_num)?;
+            bincode::serialize_into(page.as_mut_slice(), &node)?;
+        }
+        self.pager.flush()
     }
 }

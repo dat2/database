@@ -1,4 +1,4 @@
-use anyhow::{Error, Result};
+use anyhow::{ensure, Result};
 
 use crate::table::{Row, Table};
 
@@ -19,23 +19,21 @@ impl<'a> Cursor<'a> {
     }
 
     pub fn end(table: &'a mut Table) -> Result<Cursor<'a>> {
-        let root_node = table.pager.get_node(table.root_page_num)?;
+        let num_cells = { table.get_node(table.root_page_num)?.num_cells() };
         Ok(Cursor {
             page_num: table.root_page_num,
-            cell_num: root_node.num_cells(),
+            cell_num: num_cells,
             table,
         })
     }
 
-    fn is_end(&mut self) -> Result<bool> {
-        let root_node = self.table.pager.get_node(self.table.root_page_num)?;
-        Ok(root_node.num_cells() == 0)
-    }
-
-    pub fn value(&mut self) -> Result<&mut [u8]> {
-        let node = self.table.pager.get_node(self.page_num)?;
+    fn advance(&mut self) -> Result<Row> {
+        let node = self.table.get_node(self.page_num)?;
+        ensure!(self.cell_num < node.num_cells(), "Exhausted");
         let cell = &mut node.cells[self.cell_num];
-        Ok(&mut cell.value)
+        self.cell_num += 1;
+        let row = bincode::deserialize_from(cell.value.as_slice())?;
+        Ok(row)
     }
 }
 
@@ -43,15 +41,6 @@ impl<'a> Iterator for Cursor<'a> {
     type Item = Row;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.is_end() {
-            Ok(true) | Err(_) => None,
-            Ok(false) => {
-                let row = self
-                    .value()
-                    .and_then(|slot| bincode::deserialize(slot).map_err(Error::msg));
-                self.cell_num += 1;
-                row.ok()
-            }
-        }
+        self.advance().ok()
     }
 }
