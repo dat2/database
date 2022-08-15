@@ -18,15 +18,6 @@ impl<'a> Cursor<'a> {
         })
     }
 
-    pub fn end(table: &'a mut Table) -> Result<Cursor<'a>> {
-        let num_cells = { table.get_node(table.root_page_num)?.num_cells() };
-        Ok(Cursor {
-            page_num: table.root_page_num,
-            cell_num: num_cells,
-            table,
-        })
-    }
-
     fn advance(&mut self) -> Result<Row> {
         let node = self.table.get_node(self.page_num)?;
         ensure!(self.cell_num < node.num_cells(), "Exhausted");

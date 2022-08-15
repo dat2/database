@@ -31,6 +31,10 @@ fn execute_command(table: Rc<RefCell<Table>>, line: &str) -> Result<()> {
             close(table)?;
             std::process::exit(0);
         }
+        ".btree" => {
+            println!("{:?}", table.borrow_mut().get_node(0)?);
+            Ok(())
+        }
         _ => {
             println!("Unrecognized command: {}", line);
             Ok(())
@@ -109,7 +113,7 @@ fn execute_sql(table: Rc<RefCell<Table>>, line: &str) -> Result<()> {
 fn execute(table: Rc<RefCell<Table>>, line: &str) -> Result<()> {
     match line.chars().next() {
         Some('.') => execute_command(table, line),
-        _ => execute_sql(table, line)
+        _ => execute_sql(table, line),
     }
 }
 

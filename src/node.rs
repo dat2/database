@@ -1,7 +1,7 @@
+use anyhow::{ensure, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::table::Row;
-use anyhow::Result;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Type {
@@ -38,8 +38,14 @@ impl Node {
 
     pub fn insert(&mut self, key: u32, row: Row) -> Result<()> {
         let value = bincode::serialize(&row)?;
-        let cell = Cell { key, value };
-        self.cells.push(cell);
+        ensure!(
+            self.cells
+                .binary_search_by_key(&key, |cell| cell.key)
+                .is_err(),
+            "Duplicate key exists in the table."
+        );
+        let idx = self.cells.partition_point(|cell| cell.key < key);
+        self.cells.insert(idx, Cell { key, value });
         Ok(())
     }
 }
